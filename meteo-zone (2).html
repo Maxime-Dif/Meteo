@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Météo zone — PROSPÉO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #FAF5EE;
+    --cream-2: #FDFAF5;
+    --orange: #E8822C;
+    --ink: #2A2520;
+    --ink-soft: #6B6259;
+    --line: #E8DFD2;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--cream);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body { padding: 6px 8px 8px; }
+
+  .search { position: relative; margin-bottom: 6px; }
+  .search-input {
+    width: 100%; padding: 8px 36px 8px 12px;
+    background: var(--cream-2); border: 1px solid var(--line); border-radius: 8px;
+    font-family: inherit; font-size: 13px; color: var(--ink); outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .search-input:focus {
+    border-color: var(--orange); box-shadow: 0 0 0 2px rgba(232, 130, 44, 0.12);
+  }
+  .search-input::placeholder { color: #A89D8E; }
+  .search-icon {
+    position: absolute; right: 11px; top: 50%; transform: translateY(-50%);
+    width: 15px; height: 15px; color: var(--ink-soft); pointer-events: none;
+  }
+
+  .suggestions {
+    position: absolute; top: calc(100% + 3px); left: 0; right: 0;
+    background: #fff; border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(42, 37, 32, 0.08);
+    max-height: 200px; overflow-y: auto; z-index: 10; display: none;
+  }
+  .suggestions.show { display: block; }
+  .suggestion {
+    padding: 8px 12px; font-size: 13px; color: var(--ink); cursor: pointer;
+    border-bottom: 1px solid var(--line);
+  }
+  .suggestion:last-child { border-bottom: none; }
+  .suggestion:hover, .suggestion.active { background: var(--cream); }
+  .suggestion-cp { font-size: 11px; color: var(--ink-soft); margin-left: 4px; }
+
+  .state {
+    padding: 10px 8px; text-align: center; color: var(--ink-soft); font-size: 12px;
+  }
+  .state.hidden { display: none; }
+  .spinner {
+    width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--orange);
+    border-radius: 50%; animation: spin 0.7s linear infinite;
+    display: inline-block; vertical-align: middle; margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-msg {
+    color: #B33A2C; background: #FDF1EE; border: 1px solid #F4CFC8;
+    border-radius: 6px; padding: 6px 10px; font-size: 12px;
+  }
+
+  .carousel-wrap { position: relative; }
+  .carousel {
+    display: flex; overflow-x: auto;
+    scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; gap: 6px;
+  }
+  .carousel::-webkit-scrollbar { display: none; }
+
+  .day {
+    flex: 0 0 100%; scroll-snap-align: start;
+    background: var(--cream-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 10px;
+  }
+
+  .day-header {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 8px; margin-bottom: 6px;
+  }
+  /* Titre Aujourd'hui / Demain : Inter 700, sans empattements */
+  .day-label {
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-weight: 700; font-size: 14px;
+    color: var(--ink); line-height: 1;
+    display: flex; align-items: baseline; gap: 6px; min-width: 0;
+  }
+  .day-loc {
+    font-family: 'Inter', sans-serif; font-weight: 500; font-size: 11px;
+    color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .day-range {
+    font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .day-range strong { color: var(--ink); font-weight: 600; }
+
+  .periods {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+  }
+  .period {
+    background: #fff; border: 1px solid var(--line); border-radius: 7px;
+    padding: 5px 4px; display: flex; align-items: center; gap: 6px; justify-content: center;
+  }
+  .period-left {
+    display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1;
+  }
+  .period-label {
+    font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--ink-soft); font-weight: 600;
+  }
+  .period-icon { font-size: 18px; line-height: 1; }
+  .period-right {
+    display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15;
+  }
+  .period-temp {
+    font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 14px;
+    color: var(--ink); font-variant-numeric: tabular-nums;
+  }
+  .period-meta {
+    font-size: 9.5px; color: var(--ink-soft);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .period-meta .rain { color: #2674C4; }
+
+  .dots {
+    display: flex; justify-content: center; gap: 5px; margin-top: 5px;
+  }
+  .dot {
+    width: 5px; height: 5px; border-radius: 50%; background: var(--line);
+    transition: background 0.2s, width 0.2s;
+  }
+  .dot.active {
+    background: var(--orange); width: 14px; border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+
+  <div class="search">
+    <input type="text" class="search-input" id="searchInput"
+           placeholder="Code postal ou ville…" autocomplete="off" inputmode="search">
+    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+    <div class="suggestions" id="suggestions"></div>
+  </div>
+
+  <div class="state" id="emptyState">Tape un code postal ou une ville…</div>
+  <div class="state hidden" id="loadingState"><span class="spinner"></span>Chargement…</div>
+  <div class="state hidden" id="errorState"><div class="error-msg" id="errorMsg">Erreur</div></div>
+
+  <div class="hidden" id="results">
+    <div class="carousel-wrap"><div class="carousel" id="carousel"></div></div>
+    <div class="dots" id="dots"></div>
+  </div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const searchInput = $('searchInput');
+const suggestionsEl = $('suggestions');
+const emptyEl = $('emptyState');
+const loadingEl = $('loadingState');
+const errorEl = $('errorState');
+const errorMsgEl = $('errorMsg');
+const resultsEl = $('results');
+const carouselEl = $('carousel');
+const dotsEl = $('dots');
+
+let debounceTimer = null;
+const debounce = (fn, delay) => (...args) => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => fn(...args), delay);
+};
+
+async function searchBAN(query) {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const url = `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&type=municipality&limit=6`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('BAN HTTP ' + r.status);
+    const data = await r.json();
+    return (data.features || []).map(f => ({
+      label: f.properties.city || f.properties.name,
+      cp: f.properties.postcode,
+      lat: f.geometry.coordinates[1],
+      lon: f.geometry.coordinates[0]
+    }));
+  } catch (e) { console.error('BAN', e); return []; }
+}
+
+let activeSuggestionIdx = -1;
+let currentSuggestions = [];
+
+function renderSuggestions(items) {
+  currentSuggestions = items;
+  activeSuggestionIdx = -1;
+  if (!items.length) {
+    suggestionsEl.classList.remove('show');
+    suggestionsEl.innerHTML = '';
+    return;
+  }
+  suggestionsEl.innerHTML = items.map((it, i) => `
+    <div class="suggestion" data-idx="${i}">
+      ${escapeHtml(it.label)}<span class="suggestion-cp">${escapeHtml(it.cp)}</span>
+    </div>
+  `).join('');
+  suggestionsEl.classList.add('show');
+  suggestionsEl.querySelectorAll('.suggestion').forEach(el => {
+    el.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      selectSuggestion(parseInt(el.dataset.idx, 10));
+    });
+  });
+}
+
+function selectSuggestion(idx) {
+  const item = currentSuggestions[idx];
+  if (!item) return;
+  searchInput.value = `${item.label} (${item.cp})`;
+  suggestionsEl.classList.remove('show');
+  searchInput.blur();
+  loadWeather(item);
+}
+
+searchInput.addEventListener('input', debounce(async () => {
+  const q = searchInput.value.trim();
+  if (q.length < 2) { suggestionsEl.classList.remove('show'); return; }
+  renderSuggestions(await searchBAN(q));
+}, 250));
+
+searchInput.addEventListener('keydown', (e) => {
+  if (!suggestionsEl.classList.contains('show')) return;
+  const items = suggestionsEl.querySelectorAll('.suggestion');
+  if (!items.length) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    activeSuggestionIdx = Math.min(activeSuggestionIdx + 1, items.length - 1);
+    updateActive(items);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    activeSuggestionIdx = Math.max(activeSuggestionIdx - 1, 0);
+    updateActive(items);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    selectSuggestion(activeSuggestionIdx >= 0 ? activeSuggestionIdx : 0);
+  } else if (e.key === 'Escape') {
+    suggestionsEl.classList.remove('show');
+  }
+});
+
+function updateActive(items) {
+  items.forEach((el, i) => el.classList.toggle('active', i === activeSuggestionIdx));
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.search')) suggestionsEl.classList.remove('show');
+});
+
+async function loadWeather(location) {
+  showState('loading');
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast` +
+      `?latitude=${location.lat}&longitude=${location.lon}` +
+      `&hourly=temperature_2m,precipitation_probability,weather_code,wind_speed_10m` +
+      `&daily=temperature_2m_max,temperature_2m_min` +
+      `&timezone=Europe%2FParis&forecast_days=2&models=meteofrance_seamless`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('Open-Meteo HTTP ' + r.status);
+    renderWeather(location, await r.json());
+  } catch (e) {
+    console.error(e);
+    showError("Impossible de récupérer la météo.");
+  }
+}
+
+function wmoToIcon(code) {
+  if (code === 0) return '☀️';
+  if (code === 1) return '🌤️';
+  if (code === 2) return '⛅';
+  if (code === 3) return '☁️';
+  if (code === 45 || code === 48) return '🌫️';
+  if (code >= 51 && code <= 57) return '🌦️';
+  if (code >= 61 && code <= 67) return '🌧️';
+  if (code >= 71 && code <= 77) return '🌨️';
+  if (code >= 80 && code <= 82) return '🌧️';
+  if (code >= 85 && code <= 86) return '🌨️';
+  if (code >= 95 && code <= 99) return '⛈️';
+  return '🌡️';
+}
+
+// Code WMO : "est-ce un code pluie/averse/orage ?"
+function isRainCode(code) {
+  return (code >= 51 && code <= 67) || (code >= 80 && code <= 82) || (code >= 95 && code <= 99);
+}
+
+// Code WMO : "est-ce un code neige ?"
+function isSnowCode(code) {
+  return (code >= 71 && code <= 77) || (code >= 85 && code <= 86);
+}
+
+// Médiane d'un tableau de nombres
+function median(arr) {
+  if (!arr.length) return null;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? Math.round((sorted[mid - 1] + sorted[mid]) / 2)
+    : sorted[mid];
+}
+
+// Mode (valeur la plus fréquente) — fallback si médiane impair
+function mode(arr) {
+  if (!arr.length) return null;
+  const counts = {};
+  let best = arr[0], bestCount = 0;
+  for (const v of arr) {
+    counts[v] = (counts[v] || 0) + 1;
+    if (counts[v] > bestCount) { best = v; bestCount = counts[v]; }
+  }
+  return best;
+}
+
+/**
+ * Choix de l'icône représentative pour une tranche horaire — logique type Apple Weather.
+ *
+ * Règles (dans l'ordre) :
+ * 1. Neige significative (proba ≥ 40%) → icône neige la plus sévère
+ * 2. Pluie significative (max ≥ 40% OU moyenne ≥ 25%) → icône pluie la plus sévère
+ * 3. Sinon → ignorer les codes pluie/neige parasites, prendre le mode des codes "secs"
+ *    (couverture nuageuse représentative)
+ */
+function pickRepresentativeCode(codes, rains) {
+  if (!codes.length) return 0;
+
+  const maxRain = Math.max(...rains);
+  const avgRain = rains.reduce((a, b) => a + b, 0) / rains.length;
+
+  const snowCodes = codes.filter(isSnowCode);
+  const rainCodes = codes.filter(isRainCode);
+  const dryCodes = codes.filter(c => !isRainCode(c) && !isSnowCode(c));
+
+  // 1. Neige significative
+  if (snowCodes.length && maxRain >= 40) {
+    return Math.max(...snowCodes);
+  }
+
+  // 2. Pluie significative
+  if (rainCodes.length && (maxRain >= 40 || avgRain >= 25)) {
+    return Math.max(...rainCodes);
+  }
+
+  // 3. Pas de précipitation significative → couverture nuageuse représentative
+  if (dryCodes.length) {
+    return mode(dryCodes);
+  }
+
+  // Fallback : si toutes les heures sont des codes pluie mais proba faible,
+  // on prend quand même le moins sévère (typiquement bruine légère 51)
+  return Math.min(...codes);
+}
+
+function aggregatePeriod(hourly, dayIdx, startHour, endHour) {
+  const offset = dayIdx * 24;
+  const slice = (arr) => arr.slice(offset + startHour, offset + endHour);
+  const temps = slice(hourly.temperature_2m);
+  const rains = slice(hourly.precipitation_probability);
+  const winds = slice(hourly.wind_speed_10m);
+  const codes = slice(hourly.weather_code);
+  if (!temps.length) return null;
+
+  return {
+    temp: Math.round(temps.reduce((a, b) => a + b, 0) / temps.length),
+    rain: Math.round(Math.max(...rains)),
+    wind: Math.round(Math.max(...winds)),
+    code: pickRepresentativeCode(codes, rains)
+  };
+}
+
+function renderWeather(location, data) {
+  const days = [
+    { label: "Aujourd'hui", idx: 0 },
+    { label: 'Demain', idx: 1 }
+  ];
+  const periods = [
+    { label: 'Matin', start: 6, end: 12 },
+    { label: 'Après-midi', start: 12, end: 18 },
+    { label: 'Soir', start: 18, end: 23 }
+  ];
+  const locShort = `${location.label} (${location.cp})`;
+
+  carouselEl.innerHTML = days.map(day => {
+    const tMax = Math.round(data.daily.temperature_2m_max[day.idx]);
+    const tMin = Math.round(data.daily.temperature_2m_min[day.idx]);
+    const periodsHtml = periods.map(p => {
+      const agg = aggregatePeriod(data.hourly, day.idx, p.start, p.end);
+      if (!agg) return '';
+      return `
+        <div class="period">
+          <div class="period-left">
+            <div class="period-label">${p.label}</div>
+            <div class="period-icon">${wmoToIcon(agg.code)}</div>
+          </div>
+          <div class="period-right">
+            <div class="period-temp">${agg.temp}°</div>
+            <div class="period-meta"><span class="rain">💧${agg.rain}%</span> 💨${agg.wind} km/h</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="day">
+        <div class="day-header">
+          <div class="day-label">
+            ${day.label}
+            <span class="day-loc">· ${escapeHtml(locShort)}</span>
+          </div>
+          <div class="day-range"><strong>${tMin}°</strong>/<strong>${tMax}°</strong></div>
+        </div>
+        <div class="periods">${periodsHtml}</div>
+      </div>
+    `;
+  }).join('');
+
+  dotsEl.innerHTML = days.map((_, i) => `<div class="dot${i === 0 ? ' active' : ''}"></div>`).join('');
+  carouselEl.scrollLeft = 0;
+  showState('results');
+}
+
+carouselEl.addEventListener('scroll', () => {
+  const w = carouselEl.clientWidth;
+  const idx = Math.round(carouselEl.scrollLeft / w);
+  dotsEl.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === idx));
+}, { passive: true });
+
+function showState(state) {
+  emptyEl.classList.toggle('hidden', state !== 'empty');
+  loadingEl.classList.toggle('hidden', state !== 'loading');
+  errorEl.classList.toggle('hidden', state !== 'error');
+  resultsEl.classList.toggle('hidden', state !== 'results');
+}
+function showError(msg) { errorMsgEl.textContent = msg; showState('error'); }
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+</script>
+</body>
+</html>
